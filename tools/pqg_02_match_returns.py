@@ -156,10 +156,10 @@ def load_productions(meta_conn):
     return productions
 
 
-def load_sdny_efta_ranges(meta_conn):
+def load_underscore_efta_ranges(meta_conn):
     """Load SDNY-to-EFTA range mappings."""
     cur = meta_conn.cursor()
-    cur.execute("SELECT * FROM sdny_efta_ranges")
+    cur.execute("SELECT * FROM underscore_efta_ranges")
     columns = [desc[0] for desc in cur.description]
     ranges = []
     for row in cur.fetchall():

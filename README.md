@@ -81,7 +81,7 @@ Note the latest release, v5.1, at: https://github.com/rhowardstone/Epstein-resea
 | 11 | 02205655 | 02730264 |
 | 12 | 02730265 | 02858497 |
 
-**Note:** EFTA numbers are assigned **per page**, not per document. A multi-page document consumes consecutive EFTA numbers — e.g., EFTA00008320 (89 pages) covers Bates numbers 00008320–00008408, and Dataset 5 begins at EFTA00008409. There are **no gaps** between datasets; every apparent gap is accounted for by multi-page documents at dataset boundaries.
+**Note:** EFTA numbers are assigned **per page**, not per document. A multi-page document consumes consecutive EFTA numbers — e.g., EFTA00008320 (89 pages) covers Bates numbers 00008320–00008408, and Dataset 5 begins at EFTA00008409. There are **no gaps between datasets 1–11**; every apparent gap is accounted for by multi-page documents at dataset boundaries. Dataset 12 (the post-release expansion) contains internal gaps totaling ~100K unassigned EFTA numbers — these likely represent documents not yet released or reserved number ranges.
 
 ## DOJ Document Removal Audit
 
@@ -214,7 +214,7 @@ For developers building tools on top of this data:
 - Entity `efta_numbers` arrays give you cross-references: "this person appears in these documents."
 - Knowledge graph `weight` on relationships indicates strength of connection (higher = more documented).
 - Image `image_name` format is `EFTA{number}_p{page}_i{index}_{hash}.png` — parse EFTA number and page from the filename.
-- **No inter-dataset gaps:** EFTA numbers are per-page, so a multi-page terminal document in each dataset consumes the EFTA numbers up to the next dataset's start. There are no missing files between datasets.
+- **No inter-dataset gaps (DS1–DS11):** EFTA numbers are per-page, so a multi-page terminal document in each dataset consumes the EFTA numbers up to the next dataset's start. DS12 (post-release expansion) has internal gaps.
 
 ## License
 
