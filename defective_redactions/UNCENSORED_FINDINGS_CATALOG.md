@@ -57,8 +57,6 @@ Sum across disclosed redactions: **$1,334,899.04**
 
 - Financial Strategy Group, Ltd.
 - Financial Trust, Inc.
-- FT Real Estate Inc.
-- Gratitude America, Inc.
 - Hyperion Air, Inc.
 - JSC Interiors, LLC
 - Southern Trust Company, Inc. (payroll)
