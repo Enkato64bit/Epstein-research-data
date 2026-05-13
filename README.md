@@ -39,17 +39,24 @@ Structured data exports from the forensic analysis of the DOJ Jeffrey Epstein fi
 All databases are in a single release: **[v5.2 — Complete Database Collection](https://github.com/rhowardstone/Epstein-research-data/releases/tag/v5.2)** (PII-redacted).
 
 ```bash
-# Download the full text corpus (split into 2 parts, ~2.3 GB total)
-wget https://github.com/rhowardstone/Epstein-research-data/releases/download/v5.2/ftc_final_part_aa
-wget https://github.com/rhowardstone/Epstein-research-data/releases/download/v5.2/ftc_final_part_ab
-cat ftc_final_part_* > full_text_corpus.db.gz
+# Create the data directory (required for search tools)
+mkdir -p data
+
+# Download the split corpus parts (~2.3 GB total)
+wget https://github.com/rhowardstone/Epstein-research-data/releases/download/v5.2/ftc_clean_part_aa
+wget https://github.com/rhowardstone/Epstein-research-data/releases/download/v5.2/ftc_clean_part_ab
+wget https://github.com/rhowardstone/Epstein-research-data/releases/download/v5.2/ftc_clean_part_ac
+
+# Reassemble, decompress, and move to data/
+cat ftc_clean_part_* > full_text_corpus.db.gz
 gunzip full_text_corpus.db.gz
+mv full_text_corpus.db data/
 
 # Search the full text corpus
-sqlite3 full_text_corpus.db "SELECT efta_number, page_number, substr(text_content, 1, 200) FROM pages WHERE text_content LIKE '%Leon Black%' LIMIT 10;"
+sqlite3 data/full_text_corpus.db "SELECT efta_number, page_number, substr(text_content, 1, 200) FROM pages WHERE text_content LIKE '%Leon Black%' LIMIT 10;"
 
 # FTS5 full-text search (faster)
-sqlite3 full_text_corpus.db "SELECT p.efta_number, p.page_number, substr(p.text_content, 1, 200) FROM pages_fts fts JOIN pages p ON p.rowid = fts.rowid WHERE pages_fts MATCH 'shell company' LIMIT 10;"
+sqlite3 data/full_text_corpus.db "SELECT p.efta_number, p.page_number, substr(p.text_content, 1, 200) FROM pages_fts fts JOIN pages p ON p.rowid = fts.rowid WHERE pages_fts MATCH 'shell company' LIMIT 10;"
 ```
 
 ---
@@ -60,7 +67,7 @@ All databases available in the [v5.2 release](https://github.com/rhowardstone/Ep
 
 | Database | Compressed | Description |
 |----------|-----------|-------------|
-| `full_text_corpus.db` | 2.3 GB (split) | Master text database. 1.4M docs, 2.9M pages with full text and FTS5 search. DS1-12 + House Oversight (DS99) + FBI Vault (DS98) + native spreadsheets. PII-redacted. |
+| `full_text_corpus.db` (after reassembly) | 2.3 GB (split) | Master text database (split into `ftc_clean_part_aa/ab/ac`). 1.4M docs, 2.9M pages with full text and FTS5 search. DS1-12 + House Oversight (DS99) + FBI Vault (DS98). |
 | `concordance_complete.db` | 137 MB | Cross-reference with email threads, folder inventory, production metadata. |
 | `alteration_results.db` | 183 MB | 212K change units with diff text, pixel-diff, LLM classification of post-release DOJ document modifications. |
 | `redaction_analysis_v2.db` | 166 MB | 2.6M redaction boxes, 850K doc summaries, 39K reconstructed pages, 107K extracted entities. |
@@ -270,4 +277,3 @@ Questions or corrections? Use the feedback form at [epstein-data.com](https://ep
 - **[Public Guide](defective_redactions/docs/public_guide.md)** — Non-technical explanation for journalists and researchers
 
 **Key Findings:** .3M+ property tax details, 6M+ in undisclosed loans, previously unknown financial entities, evidence destruction instructions — all recoverable from original Wayback Machine archives.
-

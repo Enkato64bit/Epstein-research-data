@@ -23,16 +23,21 @@ Use `gh release download` if available, otherwise `curl -LO`. There are two rele
 #### Full text corpus (v5.0) — the main database
 
 ```bash
-# Download both parts (~2.3 GB total compressed)
-gh release download v5.0 --repo rhowardstone/Epstein-research-data --pattern "full_text_corpus.db.gz.*"
+# Create the data directory
+mkdir -p data
 
-# Reassemble and decompress
-cat full_text_corpus.db.gz.part_aa full_text_corpus.db.gz.part_ab > full_text_corpus.db.gz
+# Download the split corpus parts (v5.2)
+wget https://github.com/rhowardstone/Epstein-research-data/releases/download/v5.2/ftc_clean_part_aa
+wget https://github.com/rhowardstone/Epstein-research-data/releases/download/v5.2/ftc_clean_part_ab
+wget https://github.com/rhowardstone/Epstein-research-data/releases/download/v5.2/ftc_clean_part_ac
+
+# Reassemble, decompress, and move to data/
+cat ftc_clean_part_* > full_text_corpus.db.gz
 gunzip full_text_corpus.db.gz
-# Result: full_text_corpus.db (~6.3 GB)
+mv full_text_corpus.db data/
 
 # Clean up parts
-rm full_text_corpus.db.gz.part_aa full_text_corpus.db.gz.part_ab
+rm ftc_clean_part_*
 ```
 
 #### All other databases (v5.1)
@@ -59,7 +64,7 @@ If `gh` is not available, download manually from:
 ### 3. Verify setup
 
 ```bash
-sqlite3 full_text_corpus.db "SELECT COUNT(*) || ' documents, ' || (SELECT COUNT(*) FROM pages) || ' pages' FROM documents;"
+sqlite3 data/full_text_corpus.db "SELECT COUNT(*) || ' documents, ' || (SELECT COUNT(*) FROM pages) || ' pages' FROM documents;"
 ```
 
 Expected output: `1385916 documents, 2771231 pages`
