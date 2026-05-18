@@ -1,6 +1,38 @@
-# Uncompressed source files (compressed versions are tracked)
-document_summary.csv
-reconstructed_pages_high_interest.json
-
-# Database files (hosted as GitHub Release assets, not in repo)
+# Large Databases
+data/*.db
+data/*.db.gz
+*.db
 *.db.gz
+*.db-journal
+**/*.db-shm
+**/*.db-wal
+
+# Database Parts (Temporary/Reassembly files)
+ftc_clean_part_*
+full_text_corpus.db.gz
+
+# Large data exports in data directory
+data/*.jsonl
+data/VERIFICATION_URLS.csv
+data/query-output/
+
+# Research Data & Local Working Files
+**/*.xlsx
+la-rana-chicana-list_*.csv
+name_crossref.jsonl
+
+# Specific ignores for large analysis outputs
+doj_audit/*.csv
+alteration_analysis/*.csv
+
+# Whitelist core metadata files even if they match broad patterns
+!NON_EFTA_VERIFICATION_URLS.csv
+!extracted_names_multi_doc.csv
+!phone_numbers_enriched.csv
+
+# Logs and temporary files
+*.log
+__pycache__/
+.env
+.vscode/
+extracted_images/
