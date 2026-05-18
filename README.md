@@ -1,6 +1,7 @@
 # Epstein Files: Structured Data Exports
 
 Structured data exports from the forensic analysis of the DOJ Jeffrey Epstein file release under the [Epstein Files Transparency Act](https://www.congress.gov/bill/119th-congress/house-bill/42) (Public Law 119-38). All 12 DOJ datasets plus House Oversight Estate and FBI Vault materials: **1.4M+ documents, 2.9M+ pages**.
+Structured data exports from the forensic analysis of the DOJ Jeffrey Epstein file release under the Epstein Files Transparency Act (Public Law 119-38). All 12 DOJ datasets plus House Oversight Estate and FBI Vault materials: **1.38M+ documents, 2.77M+ pages**.
 
 **[epstein-data.com](https://epstein-data.com)** — searchable interface with full-text search, AI research assistant, document viewer, redaction analysis, deposition transcripts, geographic heatmap, and more.
 
@@ -67,7 +68,7 @@ All databases available in the [v5.2 release](https://github.com/rhowardstone/Ep
 
 | Database | Compressed | Description |
 |----------|-----------|-------------|
-| `full_text_corpus.db` (after reassembly) | 2.3 GB (split) | Master text database (split into `ftc_clean_part_aa/ab/ac`). 1.4M docs, 2.9M pages with full text and FTS5 search. DS1-12 + House Oversight (DS99) + FBI Vault (DS98). |
+| `full_text_corpus.db` (after reassembly) | 2.3 GB (split) | Master text database (split into `ftc_clean_part_aa/ab/ac`). 1.38M docs, 2.77M pages with full text and FTS5 search. DS1-12 + House Oversight (DS99) + FBI Vault (DS98). |
 | `concordance_complete.db` | 137 MB | Cross-reference with email threads, folder inventory, production metadata. |
 | `alteration_results.db` | 183 MB | 212K change units with diff text, pixel-diff, LLM classification of post-release DOJ document modifications. |
 | `redaction_analysis_v2.db` | 166 MB | 2.6M redaction boxes, 850K doc summaries, 39K reconstructed pages, 107K extracted entities. |
@@ -175,7 +176,7 @@ EFTA numbers are assigned **per page**, not per document. A 10-page document con
 | 9 | 00039025 | 01262781 | Largest (103 GB) |
 | 10 | 01262782 | 02205654 | |
 | 11 | 02205655 | 02730264 | |
-| 12 | 02730265 | 02858497 | Post-release expansion |
+| 12 | 02730265 | 02731783 | Post-release expansion |
 
 No gaps between datasets 1-11 — every apparent gap is a multi-page document at a boundary. Dataset 12 has internal gaps (~100K unassigned numbers).
 

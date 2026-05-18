@@ -254,6 +254,10 @@ def main():
         print(f"{cat}: {len(hits)}/{len(results)} officials found in corpus")
         for h in sorted(hits, key=lambda x: -x["doc_count"])[:10]:
             print(f"  {h['name']}: {h['doc_count']} docs, {h['page_count']} pages")
+            # Print highlighted snippets
+            for sample in h.get("sample_eftas", [])[:2]:
+                colored_snip = sample["snippet"].replace('>>>', '\033[1;31m').replace('<<<', '\033[0m')
+                print(f"    - {sample['efta']}: ...{colored_snip}...")
 
     print(f"\nResults written to {OUTPUT_PATH}")
 

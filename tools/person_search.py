@@ -25,27 +25,12 @@ import sys
 import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from utils import get_base_dir, save_query_interactive, save_query_silent
 
-def _find_data_dir():
-    """Find the directory containing the database files."""
-    if os.environ.get("EPSTEIN_DATA_DIR"):
-        return os.environ["EPSTEIN_DATA_DIR"]
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if os.path.exists(os.path.join(repo_root, "full_text_corpus.db")):
-        return repo_root
-    if os.path.exists(os.path.join(os.getcwd(), "full_text_corpus.db")):
-        return os.getcwd()
-    parent = os.path.dirname(os.getcwd())
-    for name in os.listdir(parent):
-        candidate = os.path.join(parent, name, "full_text_corpus.db")
-        if os.path.exists(candidate):
-            return os.path.join(parent, name)
-    return os.getcwd()
-
-BASE_DIR = _find_data_dir()
-REGISTRY_PATH = os.path.join(BASE_DIR, "persons_registry.json")
-CORPUS_DB = os.path.join(BASE_DIR, "full_text_corpus.db")
-TRANSCRIPTS_DB = os.path.join(BASE_DIR, "transcripts.db")
+_DATA_DIR = get_base_dir()
+REGISTRY_PATH = os.path.join(_DATA_DIR, "persons_registry.json")
+CORPUS_DB = os.path.join(_DATA_DIR, "full_text_corpus.db")
+TRANSCRIPTS_DB = os.path.join(_DATA_DIR, "transcripts.db")
 
 
 def load_registry(category=None):
@@ -60,9 +45,13 @@ def load_registry(category=None):
 def fts_escape(term):
     """Escape a term for FTS5 query."""
     # FTS5 uses double quotes for phrase matching
-    # Remove any existing quotes and special chars
+    # Handle prefix operator (*) by keeping it outside the quotes
+    is_prefix = term.endswith('*')
+    if is_prefix:
+        term = term[:-1]
+        
     term = term.replace('"', '').replace("'", "")
-    return f'"{term}"'
+    return f'"{term}"*' if is_prefix else f'"{term}"'
 
 
 def search_person_corpus(args):
@@ -290,7 +279,9 @@ def deep_search_person(name, registry, db_path):
                 row = cur.fetchone()
                 if row:
                     snippet = row[1].replace('\n', ' ').strip()
-                    print(f"  {efta} p{row[0]}: ...{snippet}...")
+                    # Highlight the term in Red Bold
+                    highlighted = re.sub(f"({re.escape(term)})", r"\033[1;31m\1\033[0m", snippet, flags=re.IGNORECASE)
+                    print(f"  {efta} p{row[0]}: ...{highlighted}...")
                     break
             else:
                 print(f"  {efta}")
@@ -308,8 +299,9 @@ def main():
     parser.add_argument('--top', type=int, default=0, help="Show top N by hits")
     parser.add_argument('--min-hits', type=int, default=0, help="Minimum document hits")
     parser.add_argument('--output', type=str, help="Export results to CSV")
-    parser.add_argument('--workers', type=int, default=32, help="Parallel workers")
+    parser.add_argument('--workers', type=int, default=8, help="Parallel workers (Recommended 4-8 for SQLite I/O)")
     parser.add_argument('--include-transcripts', action='store_true', help="Also search transcripts DB")
+    parser.add_argument('--auto-save', action='store_true', help="Automatically save results to file (Filename = <query>_db_results)")
     args = parser.parse_args()
 
     # Load registry
@@ -320,7 +312,12 @@ def main():
 
     # Single person deep search
     if args.name:
-        deep_search_person(args.name, registry, CORPUS_DB)
+        result = deep_search_person(args.name, registry, CORPUS_DB)
+
+        if args.auto_save:
+            save_query_silent(args.name, result)
+        else:
+            save_query_interactive(args.name, result)
         return
 
     # Co-occurrence search
@@ -331,6 +328,11 @@ def main():
             for name, data in sorted(cooccur.items(), key=lambda x: -x[1]['count']):
                 efta_sample = ', '.join(data['eftas'][:3])
                 print(f"  {name:<40} [{data['category']:<12}] {data['count']:>5} docs  ({efta_sample})")
+
+            if args.auto_save:
+                save_query_silent(args.cooccur, cooccur)
+            else:
+                save_query_interactive(args.cooccur, cooccur)
         return
 
     # Full cross-reference scan
@@ -349,9 +351,9 @@ def main():
             result = future.result()
             all_results.append(result)
             done += 1
-            if done % 100 == 0:
+            if done % 25 == 0 or done == len(registry):
                 elapsed = time.time() - t0
-                print(f"  [{done}/{len(registry)}] {elapsed:.1f}s")
+                print(f"  Progress: [{done}/{len(registry)}] persons searched... ({elapsed:.1f}s)", end='\r', flush=True)
 
     elapsed = time.time() - t0
     print(f"\nSearch complete: {elapsed:.1f}s ({len(registry)/elapsed:.0f} persons/sec)")
@@ -410,6 +412,11 @@ def main():
     print(f"  LOW (1-9 docs):          {len(low)}")
     print(f"  ZERO hits:               {len(zero)}")
     print(f"{'='*60}")
+
+    if args.auto_save:
+        save_query_silent("full_scan", all_results)
+    else:
+        save_query_interactive("full_scan", all_results)
 
     # Export CSV
     if args.output:

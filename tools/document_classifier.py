@@ -6,25 +6,28 @@ import re
 from pathlib import Path
 
 import os
+import time
 
 def _find_data_dir():
     """Find the directory containing the database files."""
     if os.environ.get("EPSTEIN_DATA_DIR"):
         return os.environ["EPSTEIN_DATA_DIR"]
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if os.path.exists(os.path.join(repo_root, "ocr_database.db")):
-        return repo_root
-    if os.path.exists(os.path.join(os.getcwd(), "ocr_database.db")):
-        return os.getcwd()
+    
+    # Standard v5.2 /data subdirectory
+    data_dir = os.path.join(repo_root, "data")
+    if os.path.exists(os.path.join(data_dir, "full_text_corpus.db")):
+        return data_dir
+
     parent = os.path.dirname(os.getcwd())
     for name in os.listdir(parent):
-        candidate = os.path.join(parent, name, "ocr_database.db")
+        candidate = os.path.join(parent, name, "full_text_corpus.db")
         if os.path.exists(candidate):
             return os.path.join(parent, name)
     return os.getcwd()
 
 _DATA_DIR = _find_data_dir()
-OCR_DB = os.path.join(_DATA_DIR, "ocr_database.db")
+CORPUS_DB = os.path.join(_DATA_DIR, "full_text_corpus.db")
 OUTPUT_PATH = os.path.join(_DATA_DIR, "document_classifications.jsonl")
 PRIORITY_PATH = os.path.join(_DATA_DIR, "priority_documents.jsonl")
 
@@ -85,46 +88,98 @@ def classify_document(text):
         'priority_matches': list(set(priority_matches))
     }
 
+def get_db_version(conn):
+    """Determine the database version based on schema."""
+    c = conn.cursor()
+    try:
+        c.execute("PRAGMA table_info(pages)")
+        columns = [col[1] for col in c.fetchall()]
+        if "text_content" in columns:
+            return "5.2"
+    except sqlite3.OperationalError:
+        pass # 'pages' table might not exist
+
+    try:
+        c.execute("PRAGMA table_info(ocr_results)")
+        columns = [col[1] for col in c.fetchall()]
+        if "text" in columns: # Assuming 'text' column for OCR results in v4.0
+            return "4.0"
+    except sqlite3.OperationalError:
+        pass # 'ocr_results' table might not exist
+    
+    return "unknown"
+
+
 def main():
     print("Classifying documents...")
     
-    conn = sqlite3.connect(OCR_DB)
+    conn = sqlite3.connect(CORPUS_DB)
     c = conn.cursor()
     
-    c.execute("SELECT efta_number, ocr_text, image_path FROM ocr_results WHERE ocr_text IS NOT NULL AND ocr_text != ''")
-    rows = c.fetchall()
+    db_version = get_db_version(conn)
+    print(f"Detected database version: {db_version}")
+
+    if db_version == "5.2":
+        query = "SELECT efta_number, text_content, '' FROM pages WHERE text_content IS NOT NULL AND text_content != ''"
+        doc_id_col = 0 # efta_number
+        text_col = 1 # text_content
+        path_col = 2 # empty string
+    elif db_version == "4.0":
+        query = "SELECT bates, text, image_path FROM ocr_results WHERE text IS NOT NULL AND text != ''"
+        doc_id_col = 0 # bates
+        text_col = 1 # text
+        path_col = 2 # image_path
+    else:
+        print("ERROR: Unsupported database version or schema not recognized. Please ensure full_text_corpus.db or ocr_database.db is present and valid.")
+        conn.close()
+        return
+
+    # Get a count for the progress bar
+    c.execute(f"SELECT COUNT(*) FROM ({query})") # Use subquery to count based on the actual query
+    total_rows = c.fetchone()[0]
+    print(f"Processing {total_rows:,} pages...")
+
+    c.execute(query)
     
-    print(f"Processing {len(rows)} documents with OCR text...")
-    
-    classifications = []
     priority_docs = []
     
     type_counts = {}
-    
-    for efta, text, path in rows:
-        result = classify_document(text)
-        
-        doc = {
-            'efta': efta,
-            'path': path,
-            'types': result['types'],
-            'priority_score': result['priority_score'],
-            'priority_matches': result['priority_matches']
-        }
-        
-        classifications.append(doc)
-        
-        if result['priority_score'] > 0:
-            priority_docs.append(doc)
-        
-        for t in result['types']:
-            type_counts[t] = type_counts.get(t, 0) + 1
-    
-    # Write all classifications
+    processed_count = 0
+    start_time = time.time()
+
     with open(OUTPUT_PATH, 'w') as f:
-        for doc in classifications:
+        for row in c:
+            doc_id = row[doc_id_col]
+            text = row[text_col]
+            path = row[path_col]
+
+            result = classify_document(text)
+        
+            doc = {
+                'doc_id': doc_id, # Use generic 'doc_id' for version compatibility
+                'path': path,
+                'types': result['types'],
+                'priority_score': result['priority_score'],
+                'priority_matches': result['priority_matches']
+            }
+            
+            # Write immediately to disk to save memory
             f.write(json.dumps(doc) + '\n')
-    
+            
+            if result['priority_score'] > 0:
+                priority_docs.append(doc)
+            
+            for t in result['types']:
+                type_counts[t] = type_counts.get(t, 0) + 1
+                
+            processed_count += 1
+            if processed_count % 1000 == 0:
+                elapsed = time.time() - start_time
+                rate = processed_count / elapsed
+                eta = (total_rows - processed_count) / rate / 60
+                print(f"  Processed {processed_count:,} / {total_rows:,} ({processed_count/total_rows*100:.1f}%) | ETA: {eta:.1f} min", end='\r')
+
+    print(f"\n\nClassification complete in {(time.time() - start_time)/60:.1f} minutes.")
     # Write priority documents sorted by score
     priority_docs.sort(key=lambda x: -x['priority_score'])
     with open(PRIORITY_PATH, 'w') as f:
@@ -138,7 +193,7 @@ def main():
     print(f"\nHigh priority documents: {len(priority_docs)}")
     print(f"Top 10 priority documents:")
     for doc in priority_docs[:10]:
-        print(f"  {doc['efta']}: score={doc['priority_score']}, matches={doc['priority_matches']}")
+        print(f"  {doc['doc_id']}: score={doc['priority_score']}, matches={doc['priority_matches']}")
     
     print(f"\nResults saved to:")
     print(f"  {OUTPUT_PATH}")

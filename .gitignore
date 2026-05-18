@@ -36,3 +36,5 @@ __pycache__/
 .env
 .vscode/
 extracted_images/
+.bashrc
+proposed_upgrade/

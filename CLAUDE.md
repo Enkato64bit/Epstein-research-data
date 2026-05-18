@@ -20,7 +20,7 @@ If missing: Mac/Linux usually have it pre-installed. On Ubuntu/Debian: `sudo apt
 
 Use `gh release download` if available, otherwise `curl -LO`. There are two releases to download from.
 
-#### Full text corpus (v5.0) — the main database
+#### Full text corpus (v5.2) — the main database
 
 ```bash
 # Create the data directory
