@@ -32,6 +32,9 @@ REGISTRY_PATH = os.path.join(_DATA_DIR, "persons_registry.json")
 CORPUS_DB = os.path.join(_DATA_DIR, "full_text_corpus.db")
 TRANSCRIPTS_DB = os.path.join(_DATA_DIR, "transcripts.db")
 
+# Threshold for terminal output capacity
+TERMINAL_CAPACITY_THRESHOLD = 100
+
 
 def load_registry(category=None):
     """Load persons registry, optionally filtered by category."""
@@ -324,8 +327,16 @@ def main():
     if args.cooccur:
         cooccur = find_cooccurrences(args.cooccur, registry, CORPUS_DB)
         if cooccur:
-            print(f"\nCo-occurrences with {args.cooccur} ({len(cooccur)} persons):\n")
-            for name, data in sorted(cooccur.items(), key=lambda x: -x[1]['count']):
+            sorted_cooccur = sorted(cooccur.items(), key=lambda x: -x[1]['count'])
+            
+            if len(sorted_cooccur) > TERMINAL_CAPACITY_THRESHOLD:
+                print(f"\n[!] NOTICE: Output ({len(sorted_cooccur)} results) exceeds terminal display capacity.")
+                print(f"[!] Exporting full results to the project directory and truncating display.")
+                save_query_silent(f"cooccur_{args.cooccur.replace(' ', '_')}", cooccur)
+                sorted_cooccur = sorted_cooccur[:TERMINAL_CAPACITY_THRESHOLD]
+
+            print(f"\nCo-occurrences with {args.cooccur} (showing {len(sorted_cooccur)}/{len(cooccur)} persons):\n")
+            for name, data in sorted_cooccur:
                 efta_sample = ', '.join(data['eftas'][:3])
                 print(f"  {name:<40} [{data['category']:<12}] {data['count']:>5} docs  ({efta_sample})")
 
@@ -380,12 +391,22 @@ def main():
     if args.top:
         all_results = all_results[:args.top]
 
+    # Check if results exceed terminal capacity
+    with_hits = [r for r in all_results if r['total_docs'] > 0]
+    display_results = all_results
+
+    if not args.top and len(with_hits) > TERMINAL_CAPACITY_THRESHOLD:
+        print(f"\n[!] NOTICE: Output ({len(with_hits)} results) exceeds terminal display capacity.")
+        print(f"[!] Exporting full results to the project directory and truncating display.")
+        save_query_silent("full_scan_overflow", all_results)
+        display_results = all_results[:TERMINAL_CAPACITY_THRESHOLD]
+
     # Display
     print(f"\n{'='*100}")
     print(f"{'NAME':<40} {'CAT':<14} {'DOCS':>7} {'FTS':>7} {'LIKE':>7}  TOP TERMS")
     print(f"{'='*100}")
 
-    for r in all_results:
+    for r in display_results:
         if r['total_docs'] == 0 and not args.min_hits:
             continue
 
