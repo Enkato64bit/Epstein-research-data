@@ -14,6 +14,10 @@ import os
 import json
 from collections import Counter, defaultdict
 
+# Threshold for terminal output capacity
+TERMINAL_CAPACITY_THRESHOLD = 100
+
+
 def _find_data_dir():
     """Find the directory containing the database files."""
     if os.environ.get("EPSTEIN_DATA_DIR"):
@@ -21,8 +25,12 @@ def _find_data_dir():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if os.path.exists(os.path.join(repo_root, "full_text_corpus.db")):
         return repo_root
+    if os.path.exists(os.path.join(repo_root, "data", "full_text_corpus.db")):
+        return os.path.join(repo_root, "data")
     if os.path.exists(os.path.join(os.getcwd(), "full_text_corpus.db")):
         return os.getcwd()
+    if os.path.exists(os.path.join(os.getcwd(), "data", "full_text_corpus.db")):
+        return os.path.join(os.getcwd(), "data")
     parent = os.path.dirname(os.getcwd())
     for name in os.listdir(parent):
         candidate = os.path.join(parent, name, "full_text_corpus.db")
@@ -76,14 +84,14 @@ def extract_rider_documents(conn):
     # Find all pages containing formal RIDER text
     # Include: "RIDER (Grand Jury Subpoena to...", "SUBPOENA RIDER" (standalone header)
     # Exclude: FBI internal emails that merely DISCUSS riders
+    # Optimized search using FTS5 index to prevent OperationalErrors (timeouts) on 6GB corpus
+    print("Scanning corpus for subpoena riders (using FTS5 index)...")
     cur.execute("""
-        SELECT efta_number, page_number, text_content
-        FROM pages
-        WHERE (text_content LIKE '%RIDER%Grand Jury Subpoena%'
-               OR text_content LIKE '%RIDER%Subpoena to%'
-               OR (text_content LIKE '%SUBPOENA RIDER%'
-                   AND text_content NOT LIKE '%From:%To:%Subject:%'))
-        ORDER BY efta_number, page_number
+        SELECT p.efta_number, p.page_number, p.text_content
+        FROM pages p 
+        JOIN pages_fts fts ON p.rowid = fts.rowid
+        WHERE fts.text_content MATCH 'RIDER SUBPOENA'
+        ORDER BY p.efta_number, p.page_number
     """)
 
     rider_pages = cur.fetchall()
@@ -92,10 +100,16 @@ def extract_rider_documents(conn):
     # Group by document, filtering out false positives
     docs = defaultdict(list)
     for efta, page_num, text in rider_pages:
+        # Ensure original logic precision for RIDER patterns
+        if not ('RIDER' in text and ('Subpoena' in text or 'SUBPOENA' in text)):
+            continue
         # Skip court filings that mention "RIDER" in legal context, not as subpoena riders
         if 'Case 9:08-cv-80119' in text:
             continue
         # Skip pages where "RIDER" appears only in a legal citation context
+        # Exclude internal emails discussing riders
+        if 'From:' in text and 'To:' in text and 'Subject:' in text:
+            continue
         if 'Privilege Against Self-Incrimination' in text and 'RIDER' not in text[:100]:
             continue
         docs[efta].append((page_num, text))
@@ -368,6 +382,22 @@ def get_doc_page_count(conn, efta_number):
 
 
 def main():
+    if not os.path.exists(DB_PATH):
+        print(f"\n[!] ERROR: Database not found at {DB_PATH}")
+        print(f"[!] Please ensure full_text_corpus.db is in the project root or 'data/' directory.")
+        return
+
+    try:
+        # Connect in read-only mode to prevent accidental empty file creation
+        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pages'")
+        if not cur.fetchone():
+            raise sqlite3.OperationalError("Table 'pages' missing. DB might be corrupted or empty.")
+    except sqlite3.OperationalError as e:
+        print(f"\n[!] OPERATIONAL ERROR: {e}")
+        return
+
     conn = sqlite3.connect(DB_PATH)
 
     print("=" * 80)
@@ -380,8 +410,9 @@ def main():
     # Step 2: Also get total subpoena-mentioning documents for context
     cur = conn.cursor()
     cur.execute("""
-        SELECT COUNT(DISTINCT efta_number) FROM pages
-        WHERE text_content LIKE '%SUBPOENA%' OR text_content LIKE '%subpoena%'
+        SELECT COUNT(DISTINCT efta_number) 
+        FROM pages_fts 
+        WHERE text_content MATCH 'subpoena'
     """)
     total_subpoena_docs = cur.fetchone()[0]
 
@@ -469,6 +500,10 @@ def main():
         print(f"  {cat}: {count}")
 
     # By dataset
+    if len(records) > TERMINAL_CAPACITY_THRESHOLD:
+        print(f"\n[!] NOTICE: Subpoena list ({len(records)} entries) exceeds terminal capacity.")
+        print(f"[!] The full structured report has been exported to: {OUTPUT_CSV}")
+
     ds_counts = Counter(r["dataset"] for r in records)
     print("\n--- Subpoenas by Dataset ---")
     for ds, count in sorted(ds_counts.items()):
@@ -523,9 +558,14 @@ def main():
     # Date range
     dates = [r["date"] for r in records if r["date"]]
     if dates:
+        def date_sort_key(d):
+            # Extract 4-digit year for better (though still approximate) chronological range
+            year_match = re.search(r'\d{4}', d)
+            return year_match.group(0) if year_match else d
+            
         print(f"\n--- Date Range ---")
-        print(f"  Earliest: {min(dates, key=lambda d: d)}")
-        print(f"  Latest: {max(dates, key=lambda d: d)}")
+        print(f"  Earliest: {min(dates, key=date_sort_key)}")
+        print(f"  Latest: {max(dates, key=date_sort_key)}")
         print(f"  Dated subpoenas: {len(dates)} / {len(records)}")
 
     # Records with no target parsed
